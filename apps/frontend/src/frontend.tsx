@@ -9,9 +9,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 
 const elem = document.getElementById("root")!;
-const app = (
-  <App />
-);
+const app = <App />;
 
 if (import.meta.hot) {
   // With hot module reloading, `import.meta.hot.data` is persisted.

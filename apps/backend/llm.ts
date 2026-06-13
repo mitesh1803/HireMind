@@ -1,5 +1,5 @@
 import Groq from "groq-sdk";
-import { redis } from "./src/lib/redis";
+import { redis } from "./lib/redis";
 import { systemPrompt } from "./prompt";
 
 const groq = new Groq({
@@ -33,7 +33,7 @@ export async function generateResponse(
         typeof msg.content === "string",
     );
 
-  const Prompt = systemPrompt(githubData)
+  const Prompt = systemPrompt(githubData);
 
   // Streaming LLM completion
   const stream = await groq.chat.completions.create({

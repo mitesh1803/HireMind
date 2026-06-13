@@ -1,4 +1,4 @@
-import "styles/globals.css"
+import "styles/globals.css";
 import { Form } from "./components/Form";
 import { useState } from "react";
 import { Interview } from "./components/Interview";

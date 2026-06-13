@@ -5,7 +5,7 @@ import cors from "cors";
 import { prisma } from "./db";
 import { calculateResult } from "./result";
 import { setupWebSocket } from "./ws";
-import  http from "http"
+import http from "http";
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: process.env.FRONTEND_URL }));
@@ -13,151 +13,168 @@ app.use(cors({ origin: process.env.FRONTEND_URL }));
 const calculatingResult = new Set<string>();
 
 app.post("/api/v1/pre-interview", async (req, res) => {
-    const { success, data } = PreInterviewBody.safeParse(req.body);
+  const { success, data } = PreInterviewBody.safeParse(req.body);
 
-    if (!success) {
-        res.status(411).json({ message: "Incorrect body" });
-        return;
-    }
+  if (!success) {
+    res.status(411).json({ message: "Incorrect body" });
+    return;
+  }
 
-    const githubUrl = data.github.endsWith("/") ? data.github.slice(0, -1) : data.github;
-    const githubUsername = githubUrl.split("/").pop();
-    
-    console.log(githubUrl,githubUsername)
-    if (!githubUsername || githubUsername.length === 0) {
-        res.status(400).json({ message: "Invalid GitHub URL" });
-        return;
-    }
+  const githubUrl = data.github.endsWith("/")
+    ? data.github.slice(0, -1)
+    : data.github;
+  const githubUsername = githubUrl.split("/").pop();
 
-    let githubData = [];
-    try {
-        githubData = await scrapeGithub(githubUsername);
-    } catch (e) {
-        console.error("[pre-interview] GitHub scrape failed:", e);
-        res.status(400).json({ message: "Could not fetch GitHub profile. Check the URL and try again." });
-        return;
-    }
+  console.log(githubUrl, githubUsername);
+  if (!githubUsername || githubUsername.length === 0) {
+    res.status(400).json({ message: "Invalid GitHub URL" });
+    return;
+  }
 
-    // Store as Json object directly — Prisma Json field does NOT need JSON.stringify
-    const interview = await prisma.interview.create({
-        data: {
-            githubMetadata: githubData,
-            status: "Pre"
-        }
+  let githubData = [];
+  try {
+    githubData = await scrapeGithub(githubUsername);
+  } catch (e) {
+    console.error("[pre-interview] GitHub scrape failed:", e);
+    res.status(400).json({
+      message: "Could not fetch GitHub profile. Check the URL and try again.",
     });
+    return;
+  }
 
-    res.json({ id: interview.id });
+  // Store as Json object directly — Prisma Json field does NOT need JSON.stringify
+  const interview = await prisma.interview.create({
+    data: {
+      githubMetadata: githubData,
+      status: "Pre",
+    },
+  });
+
+  res.json({ id: interview.id });
 });
 
 // Called by frontend when voice session begins — marks interview as InProgress
 app.post("/api/v1/session/start/:interviewId", async (req, res) => {
-    const { interviewId } = req.params;
+  const { interviewId } = req.params;
 
-    const interview = await prisma.interview.findFirst({ where: { id: interviewId } });
-    if (!interview) {
-        res.status(404).json({ message: "Interview not found" });
-        return;
-    }
+  const interview = await prisma.interview.findFirst({
+    where: { id: interviewId },
+  });
+  if (!interview) {
+    res.status(404).json({ message: "Interview not found" });
+    return;
+  }
 
-    await prisma.interview.update({
-        where: { id: interviewId },
-        data: { status: "InProgress" }
-    });
+  await prisma.interview.update({
+    where: { id: interviewId },
+    data: { status: "InProgress" },
+  });
 
-    res.json({ message: "Interview started" });
+  res.json({ message: "Interview started" });
 });
 
 // Called by Deepgram STT to persist user speech
 app.post("/api/v1/session/user/response/:interviewId", async (req, res) => {
-    const { message } = req.body;
+  const { message } = req.body;
 
-    if (!message?.trim()) {
-        res.status(400).json({ message: "Empty message" });
-        return;
-    }
+  if (!message?.trim()) {
+    res.status(400).json({ message: "Empty message" });
+    return;
+  }
 
-    await prisma.message.create({
-        data: {
-            interviewId: req.params.interviewId,
-            type: "User",
-            message: message.trim()
-        }
-    });
+  await prisma.message.create({
+    data: {
+      interviewId: req.params.interviewId,
+      type: "User",
+      message: message.trim(),
+    },
+  });
 
-    res.json({ message: "Message saved" });
+  res.json({ message: "Message saved" });
 });
 
 // Called by the AI interviewer to persist its own responses
-app.post("/api/v1/session/assistant/response/:interviewId", async (req, res) => {
+app.post(
+  "/api/v1/session/assistant/response/:interviewId",
+  async (req, res) => {
     const { message } = req.body;
 
     if (!message?.trim()) {
-        res.status(400).json({ message: "Empty message" });
-        return;
+      res.status(400).json({ message: "Empty message" });
+      return;
     }
 
     await prisma.message.create({
-        data: {
-            interviewId: req.params.interviewId,
-            type: "Assistant",
-            message: message.trim()
-        }
+      data: {
+        interviewId: req.params.interviewId,
+        type: "Assistant",
+        message: message.trim(),
+      },
     });
 
     res.json({ message: "Message saved" });
-});
+  },
+);
 
 app.get("/api/v1/result/:interviewId", async (req, res) => {
-    const { interviewId } = req.params;
+  const { interviewId } = req.params;
 
-    const interview = await prisma.interview.findFirst({
-        where: { id: interviewId },
-        include: { conversations: true }
-    });
+  const interview = await prisma.interview.findFirst({
+    where: { id: interviewId },
+    include: { conversations: true },
+  });
 
-    if (!interview) {
-        res.status(404).json({ message: "Interview not found" });
-        return;
-    }
+  if (!interview) {
+    res.status(404).json({ message: "Interview not found" });
+    return;
+  }
 
-    res.json({
-        score: interview.score,
-        feedback: interview.feedback,
-        transcript: interview.conversations.map(c => ({
-            type: c.type,
-            content: c.message,
-            createdAt: c.createdAt
-        })),
-        status: interview.status
-    });
+  res.json({
+    score: interview.score,
+    feedback: interview.feedback,
+    transcript: interview.conversations.map((c) => ({
+      type: c.type,
+      content: c.message,
+      createdAt: c.createdAt,
+    })),
+    status: interview.status,
+  });
 
-    if (interview.status !== "Done" && !calculatingResult.has(interviewId)) {
+  if (interview.status !== "Done" && !calculatingResult.has(interviewId)) {
     calculatingResult.add(interviewId);
 
-    const userMessages = interview.conversations.filter(c => c.type === "User");
-    
+    const userMessages = interview.conversations.filter(
+      (c) => c.type === "User",
+    );
+
     if (userMessages.length === 0) {
-        // No user speech at all — skip LLM call entirely
-        prisma.interview.update({
-            where: { id: interviewId },
-            data: { 
-                status: "Done", 
-                feedback: "Candidate did not speak during the interview.", 
-                score: 0 
-            }
-        }).finally(() => calculatingResult.delete(interviewId));
+      // No user speech at all — skip LLM call entirely
+      prisma.interview
+        .update({
+          where: { id: interviewId },
+          data: {
+            status: "Done",
+            feedback: "Candidate did not speak during the interview.",
+            score: 0,
+          },
+        })
+        .finally(() => calculatingResult.delete(interviewId));
     } else {
-        calculateResult(interview.conversations)
-            .then(result =>
-                prisma.interview.update({
-                    where: { id: interviewId },
-                    data: { status: "Done", feedback: result.feedback, score: result.score }
-                })
-            )
-            .catch(e => console.error("[result] calculation failed:", e))
-            .finally(() => calculatingResult.delete(interviewId));
+      calculateResult(interview.conversations)
+        .then((result) =>
+          prisma.interview.update({
+            where: { id: interviewId },
+            data: {
+              status: "Done",
+              feedback: result.feedback,
+              score: result.score,
+            },
+          }),
+        )
+        .catch((e) => console.error("[result] calculation failed:", e))
+        .finally(() => calculatingResult.delete(interviewId));
     }
-}
+  }
 });
 
 const server = http.createServer(app);

@@ -1,5 +1,5 @@
 export function systemPrompt(githubData: string) {
-return `
+  return `
 You are a professional female technical interviewer conducting a realistic software engineering interview.
 
 Here is the candidate's GitHub profile metadata:
@@ -57,8 +57,8 @@ Important:
 * Ask follow-up questions based on previous answers instead of switching topics abruptly.
 * Prioritize depth of understanding over rapid questioning.
   `;
-  }
-  
+}
+
 export const RESULT_PROMPT = `
 You are a strict technical interview evaluator. Evaluate the transcript below honestly.
 
